@@ -24,11 +24,13 @@ A necessidade de provisionar ambientes de forma manual é propensa a erros, inco
 ```mermaid
 graph TB
     subgraph "Digital Ocean Cloud"
-        K8S[Kubernetes Cluster DOKS<br/>Versão 1.33<br/>3 nodes - Auto-scaling]
+        subgraph VPC["VPC - 10.10.0.0/16<br/>Private Network"]
+            K8S[Kubernetes Cluster DOKS<br/>Versão 1.33<br/>3 nodes - Auto-scaling<br/>Subnet: 10.244.0.0/16]
 
-        DB_PROD[(Database Produção<br/>PostgreSQL 18<br/>Gerenciado - HA)]
+            DB_PROD[(Database Produção<br/>PostgreSQL 18<br/>Gerenciado - HA)]
 
-        DB_STAGING[(Database Homologação<br/>PostgreSQL 18<br/>Gerenciado - Single Node)]
+            DB_STAGING[(Database Homologação<br/>PostgreSQL 18<br/>Gerenciado - Single Node)]
+        end
     end
 
     K8S -.Private Network<br/>SSL/TLS.-> DB_PROD
@@ -37,6 +39,7 @@ graph TB
     style K8S fill:#326CE5,color:#fff
     style DB_PROD fill:#336791,color:#fff
     style DB_STAGING fill:#336791,color:#fff
+    style VPC fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px
 ```
 
 #### Componentes da Arquitetura
