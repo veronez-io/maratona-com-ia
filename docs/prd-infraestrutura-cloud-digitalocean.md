@@ -409,173 +409,9 @@ vpc_cidr
 vpc_region
 ```
 
-## 10. Fluxo de Provisionamento com Terraform
+## 10. Casos de Uso
 
-### 10.1 Diagrama de Fluxo de Provisionamento
-
-```mermaid
-sequenceDiagram
-    actor DevOps as DevOps Engineer
-    participant TF as Terraform CLI
-    participant State as Remote State<br/>(S3/Spaces)
-    participant DO as Digital Ocean API
-    participant VPC as VPC Network
-    participant K8S as Kubernetes Cluster
-    participant DB_P as Database Prod
-    participant DB_S as Database Staging
-    participant REG as Container Registry
-
-    DevOps->>DevOps: 1. Configurar terraform.tfvars<br/>(projeto, região, sizing)
-
-    DevOps->>TF: 2. terraform init
-    TF->>State: Configurar backend remoto
-    State-->>TF: Backend configurado
-
-    DevOps->>TF: 3. terraform plan
-    TF->>State: Ler state atual
-    State-->>TF: State atual (ou vazio)
-    TF->>DO: Consultar recursos existentes
-    DO-->>TF: Estado dos recursos
-    TF-->>DevOps: Plano de execução<br/>(+7 recursos a criar)
-
-    DevOps->>TF: 4. terraform apply
-
-    rect rgb(200, 220, 250)
-        Note over TF,VPC: Fase 1: Networking (1-2 min)
-        TF->>DO: Criar VPC (10.10.0.0/16)
-        DO->>VPC: Provisionar VPC
-        VPC-->>DO: VPC criada
-        DO-->>TF: VPC ID
-    end
-
-    rect rgb(220, 250, 200)
-        Note over TF,K8S: Fase 2: Kubernetes Cluster (8-10 min)
-        TF->>DO: Criar cluster DOKS<br/>(nome, região, versão)
-        DO->>K8S: Provisionar control plane (HA)
-        DO->>K8S: Provisionar node pool<br/>(3 nodes iniciais)
-        K8S-->>DO: Cluster operacional
-        DO-->>TF: Cluster ID + kubeconfig
-    end
-
-    rect rgb(250, 220, 200)
-        Note over TF,DB_P: Fase 3: Database Produção (5-7 min)
-        TF->>DO: Criar DB cluster Prod<br/>(PostgreSQL 18, HA)
-        DO->>DB_P: Provisionar 2 nodes<br/>(Primary + Standby)
-        DO->>DB_P: Configurar replicação
-        DO->>DB_P: Configurar backups
-        DB_P-->>DO: Database operacional
-        DO-->>TF: DB credentials (sensitive)
-    end
-
-    rect rgb(250, 240, 200)
-        Note over TF,DB_S: Fase 4: Database Staging (3-5 min)
-        TF->>DO: Criar DB cluster Staging<br/>(PostgreSQL 18, single node)
-        DO->>DB_S: Provisionar 1 node
-        DO->>DB_S: Configurar backups
-        DB_S-->>DO: Database operacional
-        DO-->>TF: DB credentials (sensitive)
-    end
-
-    rect rgb(230, 230, 250)
-        Note over TF,REG: Fase 5: Container Registry (1 min)
-        TF->>DO: Integrar Container Registry
-        DO->>REG: Configurar integração
-        REG-->>DO: Registry configurado
-        DO-->>TF: Registry URL
-    end
-
-    TF->>State: Salvar state final
-    State-->>TF: State salvo
-
-    TF-->>DevOps: Apply complete!<br/>Outputs:<br/>- cluster_endpoint<br/>- kubeconfig<br/>- db credentials<br/>- vpc_id
-
-    DevOps->>DevOps: 5. Salvar outputs<br/>(kubeconfig, db URIs)
-
-    DevOps->>K8S: 6. kubectl config<br/>use-context
-    K8S-->>DevOps: Contexto configurado
-
-    DevOps->>K8S: 7. Testar conectividade<br/>kubectl get nodes
-    K8S-->>DevOps: ✓ 3 nodes ready
-
-    DevOps->>DB_P: 8. Testar conexão DB Prod<br/>(via private URI)
-    DB_P-->>DevOps: ✓ Conexão SSL estabelecida
-
-    DevOps->>DB_S: 9. Testar conexão DB Staging<br/>(via private URI)
-    DB_S-->>DevOps: ✓ Conexão SSL estabelecida
-
-    Note over DevOps: ✓ Infraestrutura provisionada<br/>✓ Tempo total: ~15 minutos<br/>✓ Pronta para deploy
-```
-
-### 10.2 Etapas Detalhadas do Provisionamento
-
-#### Fase 1: Preparação (2-3 minutos)
-1. **Configuração de Variáveis**
-   - Editar `terraform.tfvars` com valores do projeto
-   - Configurar token de API da Digital Ocean
-   - Definir região, nomes e sizing dos recursos
-
-2. **Inicialização do Terraform**
-   ```bash
-   terraform init
-   ```
-   - Download do provider digitalocean
-   - Configuração do backend remoto
-   - Inicialização de módulos
-
-3. **Planejamento**
-   ```bash
-   terraform plan -out=tfplan
-   ```
-   - Análise de diferenças
-   - Validação de sintaxe
-   - Preview de recursos a criar
-
-#### Fase 2: Provisionamento (10-15 minutos)
-4. **Aplicação das Mudanças**
-   ```bash
-   terraform apply tfplan
-   ```
-
-   **Ordem de Criação**:
-   1. VPC e networking (1-2 min)
-   2. Kubernetes cluster + node pool (8-10 min)
-   3. Database de produção com HA (5-7 min)
-   4. Database de staging (3-5 min)
-   5. Integração com Container Registry (1 min)
-
-   *Nota: Alguns recursos são provisionados em paralelo*
-
-#### Fase 3: Validação (2-3 minutos)
-5. **Coleta de Outputs**
-   ```bash
-   terraform output -json > outputs.json
-   terraform output kubeconfig_raw > kubeconfig.yaml
-   ```
-
-6. **Configuração do kubectl**
-   ```bash
-   export KUBECONFIG=./kubeconfig.yaml
-   kubectl get nodes
-   ```
-
-7. **Teste de Conectividade com Databases**
-   ```bash
-   # Produção
-   psql "$(terraform output -raw db_prod_private_uri)"
-
-   # Staging
-   psql "$(terraform output -raw db_staging_private_uri)"
-   ```
-
-8. **Validação de Recursos**
-   - Verificar nodes do cluster estão "Ready"
-   - Confirmar databases aceitam conexões
-   - Validar private networking funcional
-   - Verificar backups configurados
-
-## 11. Casos de Uso
-
-### 11.1 Provisionamento Inicial
+### 10.1 Provisionamento Inicial
 **Ator**: DevOps Engineer
 
 **Fluxo**:
@@ -588,7 +424,7 @@ sequenceDiagram
 7. Configurar kubectl com kubeconfig retornado
 8. Validar conectividade com databases
 
-### 11.2 Escalabilidade do Cluster
+### 10.2 Escalabilidade do Cluster
 **Ator**: SRE
 
 **Fluxo**:
@@ -597,7 +433,7 @@ sequenceDiagram
 3. Executar `terraform apply`
 4. Validar que auto-scaling está funcionando corretamente
 
-### 11.3 Upgrade de Database
+### 10.3 Upgrade de Database
 **Ator**: DBA/DevOps Engineer
 
 **Fluxo**:
@@ -607,7 +443,7 @@ sequenceDiagram
 4. Executar `terraform apply`
 5. Validar conectividade pós-upgrade
 
-### 11.4 Disaster Recovery
+### 10.4 Disaster Recovery
 **Ator**: SRE
 
 **Fluxo**:
@@ -617,43 +453,43 @@ sequenceDiagram
 4. Restaurar databases a partir de backups automáticos
 5. Validar estado da aplicação
 
-## 12. Considerações de Segurança
+## 11. Considerações de Segurança
 
-### 12.1 Gestão de Secrets
+### 11.1 Gestão de Secrets
 - Nunca commitar terraform.tfvars com valores reais
 - Utilizar variáveis de ambiente para DO_TOKEN
 - Considerar uso de Vault ou AWS Secrets Manager para gestão de secrets
 - Marcar outputs sensíveis como sensitive = true
 
-### 12.2 Controle de Acesso
+### 11.2 Controle de Acesso
 - Implementar RBAC no cluster Kubernetes
 - Utilizar service accounts dedicados para aplicações
 - Limitar acesso ao database apenas através da VPC
 - Implementar network policies no Kubernetes
 
-### 12.3 Auditoria
+### 11.3 Auditoria
 - Habilitar audit logs no cluster Kubernetes
 - Configurar logging de queries no database para produção
 - Manter histórico de mudanças no Terraform state
 
-## 13. Estimativa de Custos
+## 12. Estimativa de Custos
 
-### 13.1 Cluster Kubernetes
+### 12.1 Cluster Kubernetes
 - 3 nodes s-2vcpu-4gb: ~$72/mês ($24/node)
 - Load Balancer: ~$12/mês (se necessário)
 - Total cluster: ~$84/mês
 
-### 13.2 Database Produção
+### 12.2 Database Produção
 - PostgreSQL db-s-2vcpu-4gb (2 nodes HA): ~$120/mês
 - Storage 50GB: incluído
 - Total database produção: ~$120/mês
 
-### 13.3 Database Staging
+### 12.3 Database Staging
 - PostgreSQL db-s-1vcpu-2gb (1 node): ~$15/mês
 - Storage 25GB: incluído
 - Total database staging: ~$15/mês
 
-### 13.4 Networking
+### 12.4 Networking
 - VPC: gratuito
 - Bandwidth: variável (primeiros 1TB incluídos)
 
@@ -661,7 +497,7 @@ sequenceDiagram
 
 *Nota: Valores aproximados baseados em pricing da Digital Ocean em 2025. Sujeito a alterações.*
 
-## 14. Cronograma Estimado
+## 13. Cronograma Estimado
 
 ### Fase MVP (2-3 dias)
 - Dia 1: Setup do projeto, configuração de providers, módulo de networking
@@ -677,7 +513,7 @@ sequenceDiagram
 - Melhorias contínuas
 - Monitoramento e otimização
 
-## 15. Riscos e Mitigações
+## 14. Riscos e Mitigações
 
 | Risco | Probabilidade | Impacto | Mitigação |
 |-------|---------------|---------|-----------|
@@ -687,9 +523,9 @@ sequenceDiagram
 | Perda de dados | Muito Baixa | Muito Alto | Backups automáticos, testar restore regularmente |
 | Indisponibilidade da região | Muito Baixa | Alto | Planejar multi-region para disaster recovery (Fase 3) |
 
-## 16. Critérios de Aceitação
+## 15. Critérios de Aceitação
 
-### 16.1 Funcionalidade
+### 15.1 Funcionalidade
 - [ ] Cluster Kubernetes provisionado com sucesso
 - [ ] Database de produção operacional e acessível
 - [ ] Database de staging operacional e acessível
@@ -697,25 +533,25 @@ sequenceDiagram
 - [ ] Outputs expostos corretamente
 - [ ] Kubeconfig funcional
 
-### 16.2 Segurança
+### 15.2 Segurança
 - [ ] SSL habilitado para databases
 - [ ] Credenciais marcadas como sensitive
 - [ ] Firewall configurado adequadamente
 - [ ] Sem secrets no código versionado
 
-### 16.3 Documentação
+### 15.3 Documentação
 - [ ] README com instruções completas
 - [ ] Comentários inline no código
 - [ ] Exemplo de terraform.tfvars
 - [ ] Documentação de troubleshooting
 
-### 16.4 Qualidade
+### 15.4 Qualidade
 - [ ] Código formatado com terraform fmt
 - [ ] Terraform validate sem erros
 - [ ] Terraform plan executado com sucesso
 - [ ] Terraform apply executado com sucesso
 
-## 17. Próximos Passos Após Aprovação
+## 16. Próximos Passos Após Aprovação
 
 1. Setup do ambiente de desenvolvimento
 2. Configuração do Terraform backend
@@ -726,7 +562,7 @@ sequenceDiagram
 7. Testes de provisionamento completo
 8. Handover para equipe de operações
 
-## 18. Referências
+## 17. Referências
 
 - [Terraform DigitalOcean Provider Documentation](https://registry.terraform.io/providers/digitalocean/digitalocean/latest/docs)
 - [DigitalOcean Kubernetes Documentation](https://docs.digitalocean.com/products/kubernetes/)
@@ -734,7 +570,7 @@ sequenceDiagram
 - [Terraform Best Practices](https://www.terraform.io/docs/language/index.html)
 - [DigitalOcean API Documentation](https://docs.digitalocean.com/reference/api/)
 
-## 19. Glossário
+## 18. Glossário
 
 - **IaC**: Infrastructure as Code
 - **DOKS**: DigitalOcean Kubernetes Service
