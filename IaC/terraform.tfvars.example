@@ -1,0 +1,91 @@
+# ====================================
+# Configuração de Exemplo do Terraform
+# ====================================
+#
+# IMPORTANTE:
+# 1. Copie este arquivo para terraform.tfvars
+# 2. Preencha os valores reais
+# 3. NUNCA commit terraform.tfvars no Git
+#
+# Comando: cp terraform.tfvars.example terraform.tfvars
+# ====================================
+
+# ====================================
+# Variáveis Obrigatórias
+# ====================================
+
+# Token de API da Digital Ocean
+# Obtenha em: https://cloud.digitalocean.com/account/api/tokens
+do_token = "dop_v1_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# Nome do projeto (usado em nomes de recursos)
+# Exemplo: "meu-app", "ecommerce", "api-gateway"
+project_name = "maratona-ia"
+
+# Região da Digital Ocean
+# Opções: nyc1, nyc3, sfo3, fra1, lon1, ams3, sgp1, blr1, tor1
+region = "nyc1"
+
+# ====================================
+# Networking (Opcional - use defaults)
+# ====================================
+
+# vpc_cidr = "10.10.0.0/16"
+
+# ====================================
+# Kubernetes (Opcional - use defaults)
+# ====================================
+
+# Versão do Kubernetes
+# k8s_version = "1.33"
+
+# Tamanho dos nodes
+# Opções: s-2vcpu-4gb, s-4vcpu-8gb, s-8vcpu-16gb
+# k8s_node_size = "s-2vcpu-4gb"
+
+# Número inicial de nodes
+# k8s_node_count = 3
+
+# Configuração de auto-scaling
+# k8s_auto_scale = true
+# k8s_min_nodes = 2
+# k8s_max_nodes = 5
+
+# ====================================
+# Database de Produção (Opcional)
+# ====================================
+
+# db_prod_engine = "pg"
+# db_prod_version = "18"
+
+# Tamanho do database de produção
+# Opções: db-s-2vcpu-4gb, db-s-4vcpu-8gb, db-s-8vcpu-16gb
+# db_prod_size = "db-s-2vcpu-4gb"
+
+# Número de nodes (2 para HA)
+# db_prod_node_count = 2
+
+# Armazenamento em MB (50GB = 51200 MB)
+# db_prod_storage_mb = 51200
+
+# ====================================
+# Database de Staging (Opcional)
+# ====================================
+
+# db_staging_engine = "pg"
+# db_staging_version = "18"
+
+# Tamanho do database de staging
+# db_staging_size = "db-s-1vcpu-2gb"
+
+# Número de nodes (1 para custo otimizado)
+# db_staging_node_count = 1
+
+# Armazenamento em MB (25GB = 25600 MB)
+# db_staging_storage_mb = 25600
+
+# ====================================
+# Tags (Opcional)
+# ====================================
+
+# tags = ["managed-by:terraform", "project:maratona-ia", "environment:production"]
